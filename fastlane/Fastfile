@@ -1,0 +1,75 @@
+# frozen_string_literal: true
+
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+default_platform(:ios)
+
+ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] = "180"
+ENV["FASTLANE_XCODE_LIST_TIMEOUT"] = "180"
+
+TEST_DEVICES = ['iPhone 12 (14.5)']
+ROOT_PATH = File.expand_path('../', File.dirname(__FILE__))
+CONFIG_PATH = File.join(ROOT_PATH, 'Config')
+BUILD_PATH = File.join(ROOT_PATH, 'build')
+REPORTS_PATH = File.join(BUILD_PATH, 'reports')
+SRC_PATH = File.join(ROOT_PATH, 'GithubActionsTest')
+PROJECT_PATH = File.join(SRC_PATH, 'GithubActionsTest.xcodeproj')
+APP_TARGET = 'GithubActionsTest'
+SCHEME = 'GithubActionsTest'
+
+platform :ios do
+  desc 'Run tests'
+  lane :test do
+  	unit_test
+  	integration_test
+  end
+
+  desc 'Run unit tests'
+  lane :unit_test do
+    Fastlane::Actions.sh("
+      rm -rf #{REPORTS_PATH};
+    ")
+    run_tests(
+      buildlog_path: REPORTS_PATH,
+      project: PROJECT_PATH,
+      scheme: SCHEME,
+      clean: true,
+      code_coverage: true,
+      devices: TEST_DEVICES,
+      skip_slack: true,
+      derived_data_path: REPORTS_PATH,
+      cloned_source_packages_path: "SourcePackages"
+    )
+    Fastlane::Actions.sh("
+      process() {
+        coverage='#{REPORTS_PATH}/coverage.json'
+        xcrun xccov view \"$1\" --json > \"$coverage\"
+        swift #{CONFIG_PATH}/process_coverage.swift \"$coverage\"
+      };
+      export -f process;
+      find \"#{REPORTS_PATH}\" -name *.xccovreport -exec bash -c 'process \"$0\"' {} \\;
+      ")
+  end
+
+  desc 'Run integration tests'
+  lane :integration_test do
+    run_tests(
+      buildlog_path: REPORTS_PATH,
+      project: PROJECT_PATH,
+      scheme: SCHEME,
+      devices: TEST_DEVICES,
+      derived_data_path: REPORTS_PATH,
+      cloned_source_packages_path: "SourcePackages"
+    )
+  end
+end
